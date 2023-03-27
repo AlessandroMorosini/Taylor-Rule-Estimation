@@ -5,37 +5,50 @@
 # Tancredi Dorsi - 3161375
 
 
-################################## SET-UP #####################################
+################################### SET-UP #####################################
 
-# Clearing the workspace
+
+# Clear the workspace
 rm(list = ls())
 
-# installing packages
-if (!require("rstudioapi")) install.packages("rstudioapi"); library(rstudioapi)
-if (!require("ggplot2")) install.packages("ggplot2"); library(ggplot2)
-if (!require("farver")) install.packages("farver"); library(farver)
-if (!require("lmtest")) install.packages("lmtest"); library(lmtest)
-if (!require("plotly")) install.packages("plotly"); library(plotly)
-if (!require("reshape2")) install.packages("reshape2"); library(reshape2)
-if (!require("olsrr")) install.packages("olsrr"); library(olsrr)
-if (!require("tseries")) install.packages("tseries"); library(tseries)
-if (!require("ggnewscale")) install.packages("ggnewscale"); library(ggnewscale)
+# Install and loading packages
+if (!require("rstudioapi")) install.packages("rstudioapi")
+library(rstudioapi)
+if (!require("ggplot2")) install.packages("ggplot2")
+library(ggplot2)
+if (!require("farver")) install.packages("farver")
+library(farver)
+if (!require("lmtest")) install.packages("lmtest")
+library(lmtest)
+if (!require("plotly")) install.packages("plotly")
+library(plotly)
+if (!require("reshape2")) install.packages("reshape2")
+library(reshape2)
+if (!require("olsrr")) install.packages("olsrr")
+library(olsrr)
+if (!require("tseries")) install.packages("tseries")
+library(tseries)
+if (!require("ggnewscale")) install.packages("ggnewscale")
+library(ggnewscale)
+if (!require("forecast")) install.packages("forecast")
+library(forecast)
+if (!require("glmnet")) install.packages("glmnet")
+library(glmnet)
+if (!require("styler")) install.packages("styler")
+library(styler)
 
 # Set directories
 current_path <- rstudioapi::getActiveDocumentContext()$path
 current_dir <- dirname(current_path)
 data_dir <- file.path(current_dir, "data", "clean")
 
-################################## DATA #####################################
+
+#################################### DATA ######################################
+# Load the data and create a do some preliminary visualization
 
 # Load data for Taylor Regression
 interest_rate <- read.csv(
   file.path(data_dir, "interest_rate.csv"),
-  sep = "\t"
-)
-
-gdp <- read.csv(
-  file.path(data_dir, "gdp.csv"),
   sep = "\t"
 )
 
@@ -44,35 +57,33 @@ inflation_rate <- read.csv(
   sep = "\t"
 )
 
+inflation_target <- read.csv(
+  file.path(data_dir, "inflation_target.csv"),
+  sep = "\t"
+)
+
 output_gap <- read.csv(
   file.path(data_dir, "output_gap.csv"),
   sep = "\t"
 )
 
-# Load some additional data
-exchange_rate <- read.csv(
-  file.path(data_dir, "exchange_rate.csv"),
+gdp <- read.csv(
+  file.path(data_dir, "gdp.csv"),
   sep = "\t"
 )
 
-us_bond_yield <- read.csv(
-  file.path(data_dir, "us_bond_yield.csv"),
-  sep = "\t"
+gap <- inflation_rate[, 2] - inflation_target[, 2]
+inflation_gap <- data.frame(
+  year = seq(1980, 2002),
+  inflation_gap = inflation_rate[, 2] - inflation_target[, 2]
 )
 
-unemployment_rate <- read.csv(
-  file.path(data_dir, "unemployment_rate.csv"),
-  sep = "\t"
-)
+# Create dataframe containing relevant data
+df <- merge(interest_rate, output_gap, by = "year")
+df <- merge(df, gdp, by = "year")
+df <- merge(df, inflation_gap, by = "year")
 
-
-# Create dataframe
-data <- merge(interest_rate, gdp, by = "year")
-data <- merge(data, inflation_rate, by = "year")
-data <- merge(data, output_gap, by = "year")
-
-
-# Some data visualization
+# Plot interest rates
 ggplot(interest_rate, aes(x = year, y = interest_rate)) +
   geom_point() +
   labs(
@@ -82,6 +93,7 @@ ggplot(interest_rate, aes(x = year, y = interest_rate)) +
   ) +
   stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
 
+# Plot GDP
 ggplot(gdp, aes(x = year, y = gdp)) +
   geom_point() +
   labs(
@@ -91,15 +103,7 @@ ggplot(gdp, aes(x = year, y = gdp)) +
   ) +
   stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
 
-ggplot(inflation_rate, aes(x = year, y = inflation_rate)) +
-  geom_point() +
-  labs(
-    title = "Italian Inflation Rate 1980-2002",
-    x = "Year",
-    y = "Inflation Rate"
-  ) +
-  geom_smooth(formula = y ~ x, alpha = 0)
-
+# Plot output gap, i.e. difference between gdp and potential gdp
 ggplot(output_gap, aes(x = year, y = output_gap)) +
   geom_point() +
   labs(
@@ -107,80 +111,116 @@ ggplot(output_gap, aes(x = year, y = output_gap)) +
     x = "Year",
     y = "Output Gap"
   ) +
-  geom_smooth(formula = y ~ x, alpha = 0)
+  stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
+
+# Plot inflation gap, i.e. difference between actual inflation and target
+ggplot(inflation_gap, aes(x = year, y = inflation_gap)) +
+  geom_point() +
+  labs(
+    title = "Italian Inflation Gap 1980-2002",
+    x = "Year",
+    y = "Inflation Gap"
+  ) +
+  stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
+
+# Plot inflation rate
+ggplot(inflation_rate, aes(x = year, y = inflation_rate)) +
+  geom_point() +
+  labs(
+    title = "Italian Inflation Rate 1980-2002",
+    x = "Year",
+    y = "Inflation Rate"
+  ) +
+  stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
 
 
 ############################### TAYLOR REGRESSION ##############################
+# The idea is to regress interest rate on output gap and inflation gap
 
+
+# A 3d box plot of the three variable follows
 plot_ly(
-    data = data,
-    x = ~output_gap,
-    y = ~inflation_rate,
-    z = ~interest_rate,
-    type = "scatter3d",
-    mode = "markers",
-    marker = list(color = c("black", "black", "black"))
-)
-
-# Run OLS
-taylor <- lm(interest_rate ~ output_gap + inflation_rate, data = data)
-summary(taylor)
-
-# Setup Axis
-axis_x <- seq(min(data$output_gap), max(data$output_gap), by = 0.05)
-axis_y <- seq(min(data$inflation_rate), max(data$inflation_rate), by = 0.05)
-
-# Sample points
-taylor_surface <- expand.grid(output_gap = axis_x, inflation_rate = axis_y, KEEP.OUT.ATTRS = F)
-taylor_surface$interest_rate <- predict.lm(taylor, newdata = taylor_surface)
-taylor_surface <- acast(taylor_surface, inflation_rate ~ output_gap, value.var = "interest_rate") # y ~ x
-
-iris_plot <- plot_ly(data,
+  data = df,
   x = ~output_gap,
-  y = ~inflation_rate,
+  y = ~inflation_gap,
   z = ~interest_rate,
   type = "scatter3d",
   mode = "markers",
   marker = list(color = c("black", "black", "black"))
 )
-iris_plot <- add_trace(
-  p = iris_plot,
+
+# Run OLS regression using taylor rule
+taylor_reg <- lm(interest_rate ~ output_gap + inflation_gap, data = df)
+summary(taylor)
+
+# Draw the fitting hyper-plane
+axis_x <- seq(min(df$output_gap), max(df$output_gap), by = 0.05)
+axis_y <- seq(min(df$inflation_gap), max(df$inflation_gap), by = 0.05)
+
+taylor_surface <- expand.grid(output_gap = axis_x, inflation_gap = axis_y, KEEP.OUT.ATTRS = F)
+taylor_surface$interest_rate <- predict.lm(taylor_reg, newdata = taylor_surface)
+taylor_surface <- acast(taylor_surface, inflation_gap ~ output_gap, value.var = "interest_rate") # y ~ x
+
+fit_plot <- plot_ly(
+  data = df,
+  x = ~output_gap,
+  y = ~inflation_gap,
+  z = ~interest_rate,
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(color = c("black", "black", "black"))
+)
+fit_plot <- add_trace(
+  p = fit_plot,
   z = taylor_surface,
   x = axis_x,
   y = axis_y,
   type = "surface"
 )
+fit_plot
 
-iris_plot
-
-# plotting fitted values(red) vs true values(black)
-ggplot(data) +
+# Draw fitted values vs real values
+ggplot(df) +
   aes(x = year) +
   geom_point(aes(y = interest_rate, color = "Interest Rate"), size = 3) +
-  new_scale_color() +
-  geom_point(aes(y = fitted(taylor), color = "Fitted Value"), size = 3) +
+  geom_point(aes(y = fitted(taylor_reg), color = "Fitted Value"), size = 3) +
   scale_color_manual(name = "Legend", values = c("Interest Rate" = "blue", "Fitted Value" = "red")) +
   labs(x = "Year", y = "Interest Rate") +
   theme_minimal()
 
-############################## TESTS ########################################
 
-# Preliminary viz of residuals 
+# Do some comments of the model here
+# interepreation of coefficients, fitted values ..
+
+
+################################### TESTS ######################################
+# We will mostly work on residuals to run tests on the OLS assumptions.
+
+
+# Preliminary visualization of residuals
+residuals <- residuals(taylor_reg)
+residuals <- data.frame(residuals)
+residuals$ind <- rep(1980:2002)
 par(mfrow = c(2, 2))
-plot(taylor)
+plot(taylor_reg)
 par(mfrow = c(1, 1))
 
-residuals <- residuals(taylor)
-residuals <- data.frame(res)
-residuals$ind <- rep(1980:2002)
+# TEST FOR LINEARITY
 
-# TESTING FOR LINEARITY
-resettest(taylor,power = 2, type="fitted") # 2nd power significant?
-resettest(taylor,power = 3, type="fitted")
+# run Reset Test
+resettest(taylor_reg, power = 2, type = "fitted")
+resettest(taylor_reg, power = 3, type = "fitted")
+resettest(taylor_reg, power = 4, type = "fitted")
 
-# TESTING FOR NORMALITY OF RESIDUALS
+# at a 5% significance level, we do not reject the null hypothesis that
+# the relationship is linear (for the three power tested).
+
+
+# TEST FOR NORMALITY OF RESIDUALS
+
+# Plot distribution of errors
 ggplot(residuals) +
-  aes(x = res) +
+  aes(x = residuals) +
   geom_histogram(aes(y = stat(count) / sum(count)), colour = "black", fill = "white", bins = 10) +
   geom_density(alpha = .3, fill = "#FF6666", size = 1) +
   labs(
@@ -189,146 +229,147 @@ ggplot(residuals) +
     y = "Relative Frequency"
   )
 
-jarque.bera.test(residuals(taylor))
+# Run Jarque Bera Test
+jarque.bera.test(residuals(taylor_reg))
 
-# TESTING FOR HETEROSCEDASTICITY
+# at a 5% significance level, we do not reject the null hypothesis that
+# that the errors are normally distributed.
 
+
+# TEST FOR HETEROSCEDASTICITY
+
+# Plot residuals over time
 ggplot(data = residuals) +
-  aes(y = residuals(taylor), x = ind) +
+  aes(y = residuals(taylor_reg), x = ind) +
   geom_point() +
   stat_smooth(method = "lm", alpha = 0, formula = y ~ x)
 
-plot(fitted(taylor), residuals(taylor))
-abline(0,0, col = "red")
+# Run Goldfeld-Quandt Test with different alternative hypoteses
+gqtest(taylor_reg, point = 0.5, alternative = "less", fraction = 0.2, order.by = df$year)
+gqtest(taylor_reg, point = 0.5, alternative = "greater", fraction = 0.2, order.by = df$year)
+gqtest(taylor_reg, point = 0.5, alternative = "two.sided", fraction = 0.2, order.by = df$year)
+
+# at a 5% significance level, we do not reject the null hypothesis that
+# the errors are homoscedastic over the years.
+# Moreover, as the normality condition holds (as shown out by by Jarque-Bera test),
+# we can also run Breush Pagan Test
+
+bptest(taylor_reg) # varformula = output + inflation
+
+# The results confirms our findings form the previous test.
 
 
-# Goldfeld-Quandt test
+# TEST FOR CORRELATION OF RESIDUALS
 
-# with point = 0.2
-gqtest(taylor, point = 0.2, alternative = "less", order.by = data$output_gap)
-gqtest(taylor, point = 0.2, alternative = "less", order.by = data$inflation_rate)
-gqtest(taylor, point = 0.2, alternative = "less", order.by = data$year)
+# Plot autocorrelation of errors
+taylor_acf <- acf(residuals, plot = FALSE)
+plot(
+  taylor_acf$lag,
+  taylor_acf$acf,
+  type = "h",
+  xlab = "Lag",
+  ylab = "Autocorrelation",
+  main = "Autocorrelation Plot",
+  xlim = c(0, 8),
+)
 
-# with point = 0.4
-gqtest(taylor, point = 0.4, alternative = "less", order.by = data$output_gap)
-gqtest(taylor, point = 0.4, alternative = "less", order.by = data$inflation_rate)
-gqtest(taylor, point = 0.4, alternative = "less", order.by = data$year)
+# run Durbin-Watson Test for serial correlation
 
-# POINT = 0.4
-# H0 is strongly rejected: we may have a problem of heteroscedasticity
+dwtest(taylor_reg)
 
-# since by Jarque-Bera test (see above) normality hold, we can also try the BP test:
-# Breush-Pagan Test (taking output & inflation into consideration)
-bptest(taylor) # varformula = output + inflation
+# the test rejects the null hypothesis that errors are uncorrelated with respect to
+# the previous year. We can also test for correlation up to longer time span.
 
-# TESTING FOR CORRELATION OF RESIDUALS
+# run Breusch-Godfrey Test for serial correlation up to 5 years
+bgtest(taylor_reg, 1)
+bgtest(taylor_reg, 2)
+bgtest(taylor_reg, 3)
+bgtest(taylor_reg, 4)
+bgtest(taylor_reg, 5)
 
-# Durbin-Watson test for serial correlation
-dwtest(taylor)
-
-# Breusch-Godfrey test for serial correlation of order up to 3
-bgtest(taylor, 3)
-
-# DW test strongly rejects H0,
-# BG test (m = 3) rejects H0 down to alpha = 0.008
-
-# Strong indicators of serial correlation hint to a likely problem of omitted variables.
-# ...hence we proceed to extend the model.
-
-# EXTENDED MODEL
-
-# Additional Regressors:
-# 1. Unemployment Rate
-# 2. Lira/USD Exchange Rate
-# 3. Foreign Interest Rates (US)
-# 4. US 10-Year Treasury Rate
-
-#the plot actually seems to show a higher variance in the first years
-#and smaller variance in the last years
+# At a 5% confidence level, we do reject the null hypothesis that errors are serially
+# uncorrelated up to a order 3 year time span.
+# This evidence of serial correlation hints to a likely problem of omitted variables.
+# This is why we proceed to extend the model.
 
 
-
-#Goldfeld-Quandt test
-
-
-# with point = 0.1
-gqtest(taylor, point = 0.8, alternative = 'less',order.by = NULL) #same test as data$year
-gqtest(taylor, point = 0.8, alternative = 'less',order.by = data$output_gap)
-gqtest(taylor, point = 0.8, alternative = 'less',order.by = data$interest_rate)
-gqtest(taylor, point = 0.8, alternative = 'less',order.by = data$year)
-
-# with point = 0.2
-gqtest(taylor, point = 0.2, alternative = 'less',order.by = NULL) #same test as data$year
-gqtest(taylor, point = 0.2, alternative = 'less',order.by = data$output_gap)
-gqtest(taylor, point = 0.2, alternative = 'less',order.by = data$interest_rate)
-gqtest(taylor, point = 0.2, alternative = 'less',order.by = data$year)
+############################### EXTENDED MODEL #################################
+# The idea is to start from scratch.
+# We try to predict the interest rate from a very simple model and we add regressors.
+# We test their significance and see how the model performance varies.
+# We expect the model explainability to increase as we introduce new regessors,
+# but we must pay attention to incur in the trap of overfitting.
 
 
-# with point = 0.4
-gqtest(taylor, point = 0.4, alternative = 'less',order.by = NULL) #same test as data$year
-gqtest(taylor, point = 0.4, alternative = 'less',order.by = data$output_gap)
-gqtest(taylor, point = 0.4, alternative = 'less',order.by = data$interest_rate)
-gqtest(taylor, point = 0.4, alternative = 'less',order.by = data$year)
+# Based also on the observations derived from Sarcinelli's paper, we will start by adding exchange rate
+# to the model, as up until the mid-90s it was considered a measure much more impactful on the interest rates
+# than the inflation rate
 
-# with point = 0.2
-gqtest(taylor, point = 0.2, alternative = 'greater',order.by = NULL) #same test as data$year
-gqtest(taylor, point = 0.2, alternative = 'greater',order.by = data$output_gap)
-gqtest(taylor, point = 0.2, alternative = 'greater',order.by = data$interest_rate)
-gqtest(taylor, point = 0.2, alternative = 'greater',order.by = data$year)
+# Load some additional data
 
+exchange_rate <- read.csv(
+  file.path(data_dir, "exchange_rate.csv"),
+  sep = "\t"
+)
 
-# with point = 0.4
-gqtest(taylor, point = 0.4, alternative = 'greater',order.by = NULL) #same test as data$year
-gqtest(taylor, point = 0.4, alternative = 'greater',order.by = data$output_gap)
-gqtest(taylor, point = 0.4, alternative = 'greater',order.by = data$interest_rate)
-gqtest(taylor, point = 0.4, alternative = 'greater',order.by = data$year)
+unemployment_rate <- read.csv(
+  file.path(data_dir, "unemployment_rate.csv"),
+  sep = "\t"
+)
 
-# with point = 0.2
-gqtest(taylor, point = 0.2, alternative = 'two.sided',order.by = NULL) #same test as data$year
-gqtest(taylor, point = 0.2, alternative = 'two.sided',order.by = data$output_gap)
-gqtest(taylor, point = 0.2, alternative = 'two.sided',order.by = data$interest_rate)
-gqtest(taylor, point = 0.2, alternative = 'two.sided',order.by = data$year)
+us_bond_yield <- read.csv(
+  file.path(data_dir, "us_bond_yield.csv"),
+  sep = "\t"
+)
 
+us_gdp <- read.csv(
+  file.path(data_dir, "us_gdp.csv"),
+  sep = "\t"
+)
 
-# with point = 0.4
-gqtest(taylor, point = 0.4, alternative = 'two.sided',order.by = NULL) #same test as data$year
-gqtest(taylor, point = 0.4, alternative = 'two.sided',order.by = data$output_gap)
-gqtest(taylor, point = 0.4, alternative = 'two.sided',order.by = data$interest_rate)
-gqtest(taylor, point = 0.4, alternative = 'two.sided',order.by = data$year)
+terms_of_trade <- read.csv(
+  file.path(data_dir, "terms_of_trade.csv"),
+  sep = "\t"
+)
 
+# Extent dataset
+df <- merge(df, exchange_rate, by = "year")
+df <- merge(df, unemployment_rate, by = "year")
+df <- merge(df, us_bond_yield, by = "year")
+df <- merge(df, us_gdp, by = "year")
+df <- merge(df, terms_of_trade, by = "year")
 
-#all the Goldfeld Quandt tests we made on the possible heteroscedasticity gave us that 
-# the residuals don't show this behaviour
+# add Lira/USD Exchange Rate as explanatory variable
+extended_reg <- lm(
+  interest_rate ~ output_gap + inflation_gap + exchange_rate,
+  data = df
+)
+summary(extended_reg)
 
-#in order to remove any doubt, let's try the other two tests: Breusch-Pagan and White test
+# add Unemployment Rate as explanatory variable
+extended_reg <- lm(
+  interest_rate ~ output_gap + inflation_gap + exchange_rate + unemployment_rate,
+  data = df
+)
+summary(extended_reg)
 
+# add American Bond Yield as explanatory variable
+extended_reg <- lm(
+  interest_rate ~ output_gap + inflation_gap + exchange_rate + unemployment_rate + us_bond_yield, 
+  data = df
+)
+summary(extended_reg)
 
+# add Foreign Output (US)  as explanatory variable
+extended_reg <- lm(
+  interest_rate ~ output_gap + inflation_gap + exchange_rate + unemployment_rate + us_bond_yield, 
+  data = df
+)
+summary(extended_reg)
 
-
-#since by Jarque-Bera test (see above) normality hold, we can also try the BP test:
-#Breush-Pagan Test (taking output & inflation into consideration)
-bptest(taylor) # varformula = output + inflation
-
-
-#again homoscedasticity is not rejected, hence we can accept it
-
-
-# TESTING FOR CORRELATION OF RESIDUALS
-
-# Durbin-Watson test for serial correlation 
-dwtest(taylor)
-
-# Breusch-Godfrey test for serial correlation of order up to 3
-bgtest(taylor, 1)
-bgtest(taylor, 2)
-bgtest(taylor, 3)
-bgtest(taylor, 4)
-bgtest(taylor, 5)
-bgtest(taylor, 6)
-bgtest(taylor, 7)
-
-# DW test strongly rejects H0,
-# BG test (abbiamo degli errori belli correlati
-
-# Strong indicators of serial correlation hint to a likely problem of omitted variables.
-# ...hence we proceed to extend the model.
+# add Terms of Trade as explanatory variable
+extended_reg <- lm(
+  interest_rate ~ output_gap + inflation_gap + exchange_rate + unemployment_rate + us_bond_yield + terms_of_trade,
+  data = df
+)
+summary(extended_reg)
