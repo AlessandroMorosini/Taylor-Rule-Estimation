@@ -36,6 +36,8 @@ if (!require("glmnet")) install.packages("glmnet")
 library(glmnet)
 if (!require("styler")) install.packages("styler")
 library(styler)
+if (!require("MASS")) install.packages("MASS")
+library(MASS)
 
 # Set directories
 current_path <- rstudioapi::getActiveDocumentContext()$path
@@ -151,7 +153,7 @@ plot_ly(
 
 # Run OLS regression using taylor rule
 taylor_reg <- lm(interest_rate ~ output_gap + inflation_gap, data = df)
-summary(taylor)
+summary(taylor_reg)
 
 # Draw the fitting hyper-plane
 axis_x <- seq(min(df$output_gap), max(df$output_gap), by = 0.05)
@@ -159,7 +161,7 @@ axis_y <- seq(min(df$inflation_gap), max(df$inflation_gap), by = 0.05)
 
 taylor_surface <- expand.grid(output_gap = axis_x, inflation_gap = axis_y, KEEP.OUT.ATTRS = F)
 taylor_surface$interest_rate <- predict.lm(taylor_reg, newdata = taylor_surface)
-taylor_surface <- acast(taylor_surface, inflation_gap ~ output_gap, value.var = "interest_rate") # y ~ x
+taylor_surface <- acast(taylor_surface, inflation_gap ~ output_gap, value.var = "interest_rate")
 
 fit_plot <- plot_ly(
   data = df,
@@ -373,3 +375,72 @@ extended_reg <- lm(
   data = df
 )
 summary(extended_reg)
+
+
+
+######################### RIDGE AND LASSO REGRESSION ###########################
+# The idea is to run Shrinkage Regression Models on the latter model which contains many regressors.
+
+# Lasso
+y <- df$interest_rate
+x <- data.matrix(
+  df[, c("output_gap", "inflation_gap", "exchange_rate", "unemployment_rate", "us_bond_yield", "us_gdp", "terms_of_trade")]
+)
+
+cv_model_lasso <- cv.glmnet(x, y, alpha = 1)
+best_lambda_lasso <- cv_model_lasso$lambda.min
+plot(cv_model_lasso)
+
+best_model_lasso <- glmnet(x, y, alpha = 1, lambda = best_lambda_lasso)
+coef(best_model_lasso)
+
+# Ridge
+y <- df$interest_rate
+x <- data.matrix(
+  df[, c("output_gap", "inflation_gap", "exchange_rate", "unemployment_rate", "us_bond_yield", "us_gdp", "terms_of_trade")]
+)
+
+cv_model_ridge <- cv.glmnet(x, y, alpha = 0)
+best_lambda_ridge <- cv_model_ridge$lambda.min
+plot(cv_model_ridge)
+
+best_model_ridge <- glmnet(x, y, alpha = 0, lambda = best_lambda_ridge)
+coef(best_model_ridge)
+
+
+############################# FEATURE SELECTION ################################
+
+
+# Let's try with Backwards, Forward and Best Subset selection
+
+taylor_complete <- lm(interest_rate ~ output_gap + inflation_gap + exchange_rate + unemployment_rate + us_bond_yield + terms_of_trade, data = df)
+
+
+# Best Subset
+
+k <- ols_step_all_possible(taylor_complete)
+plot(k) # check
+
+mod <- ols_step_best_subset(taylor_complete)
+mod
+
+plot(mod)
+
+# Forward Selection
+
+stepAIC(taylor_complete, direction = 'forward')
+
+# Backwards Selection
+
+stepAIC(taylor_complete, direction = 'backward')
+
+# Both 
+
+stepAIC(taylor_complete, direction = 'both') 
+
+#From best subset selection we get that the best subset is the one containing
+# 1. Output gap
+# 2. Exchange rate
+# 3. Unemployment rate
+# 4. Us bond yield
+
