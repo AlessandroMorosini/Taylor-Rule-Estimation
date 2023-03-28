@@ -60,8 +60,6 @@ inflation_rate <- read.csv(
   file.path(data_dir, "inflation_rate.csv"),
   sep = "\t"
 )
-inflation_rate = inflation_rate*100
-inflation_rate
 
 inflation_target <- read.csv(
   file.path(data_dir, "inflation_target.csv"),
@@ -125,6 +123,7 @@ df <- merge(interest_rate, output_gap, by = "year")
 df <- merge(df, gdp, by = "year")
 df <- merge(df, inflation_gap, by = "year")
 df
+
 # Plot interest rates
 ggplot(interest_rate, aes(x = year, y = interest_rate)) +
   geom_point() +
@@ -190,6 +189,8 @@ plot_ly(
   mode = "markers",
   marker = list(color = c("black", "black", "black"))
 )
+
+
 
 # Run OLS regression using taylor rule
 taylor_reg <- lm(interest_rate ~ output_gap + inflation_gap, data = df)
@@ -285,6 +286,7 @@ ggplot(data = residuals) +
   aes(y = residuals(taylor_reg), x = ind) +
   geom_point() +
   stat_smooth(method = "lm", alpha = 0, formula = y ~ x)
+
 
 # Run Goldfeld-Quandt Test with different alternative hypoteses
 gqtest(taylor_reg, point = 0.5, alternative = "less", fraction = 0.2, order.by = df$year)
@@ -417,7 +419,6 @@ extended_reg <- lm(
 summary(extended_reg)
 
 
-
 ######################### RIDGE AND LASSO REGRESSION ###########################
 # The idea is to run Shrinkage Regression Models on the latter model which contains many regressors.
 
@@ -483,4 +484,88 @@ stepAIC(taylor_complete, direction = 'both')
 # 2. Exchange rate
 # 3. Unemployment rate
 # 4. Us bond yield
+
+
+################################# FINAL MODEL ##################################
+
+taylor_subset <- lm(
+  interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
+  data = df
+)
+
+# Preliminary visualization of residuals
+residuals <- residuals(taylor_subset)
+residuals <- data.frame(residuals)
+residuals$ind <- rep(1980:2002)
+par(mfrow = c(2, 2))
+plot(taylor_subset)
+par(mfrow = c(1, 1))
+
+
+# TEST FOR LINEARITY
+
+# run Reset Test
+resettest(taylor_subset, power = 2, type = "fitted")
+resettest(taylor_subset, power = 3, type = "fitted")
+resettest(taylor_subset, power = 4, type = "fitted")
+
+
+# TEST FOR NORMALITY OF RESIDUALS
+
+# Plot distribution of errors
+ggplot(residuals) +
+  aes(x = residuals) +
+  geom_histogram(aes(y = stat(count) / sum(count)), colour = "black", fill = "white", bins = 10) +
+  geom_density(alpha = .3, fill = "#FF6666", size = 1) +
+  labs(
+    title = "Residuals",
+    x = "Residual Value",
+    y = "Relative Frequency"
+  )
+
+# Run Jarque Bera Test
+jarque.bera.test(residuals(taylor_subset))
+
+
+# TEST FOR HETEROSCEDASTICITY
+
+# Plot residuals over time
+ggplot(data = residuals) +
+  aes(y = residuals(taylor_reg), x = ind) +
+  geom_point() +
+  stat_smooth(method = "lm", alpha = 0, formula = y ~ x)
+
+# Run Goldfeld-Quandt Test with different alternative hypoteses
+gqtest(taylor_subset, point = 0.5, alternative = "less", fraction = 0.2, order.by = df$year)
+gqtest(taylor_subset, point = 0.5, alternative = "greater", fraction = 0.2, order.by = df$year)
+gqtest(taylor_subset, point = 0.5, alternative = "two.sided", fraction = 0.2, order.by = df$year)
+
+# we can also run Breush Pagan Test
+bptest(taylor_subset)
+
+
+# TEST FOR CORRELATION OF RESIDUALS
+
+# Plot autocorrelation of errors
+taylor_acf <- acf(residuals, plot = FALSE)
+plot(
+  taylor_acf$lag,
+  taylor_acf$acf,
+  type = "h",
+  xlab = "Lag",
+  ylab = "Autocorrelation",
+  main = "Autocorrelation Plot",
+  xlim = c(0, 8),
+)
+
+# run Durbin-Watson Test for serial correlation
+dwtest(taylor_reg)
+
+
+# run Breusch-Godfrey Test for serial correlation up to 5 years
+bgtest(taylor_reg, 1)
+bgtest(taylor_reg, 2)
+bgtest(taylor_reg, 3)
+bgtest(taylor_reg, 4)
+bgtest(taylor_reg, 5)
 
