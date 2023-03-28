@@ -38,6 +38,8 @@ if (!require("styler")) install.packages("styler")
 library(styler)
 if (!require("MASS")) install.packages("MASS")
 library(MASS)
+if (!require("lubridate")) install.packages("lubridate")
+library(lubridate)
 
 # Set directories
 current_path <- rstudioapi::getActiveDocumentContext()$path
@@ -73,17 +75,55 @@ gdp <- read.csv(
   file.path(data_dir, "gdp.csv"),
   sep = "\t"
 )
+gdp
 
-gap <- inflation_rate[, 2] - inflation_target[, 2]
 inflation_gap <- data.frame(
   year = seq(1980, 2002),
   inflation_gap = inflation_rate[, 2] - inflation_target[, 2]
 )
 
+# Interpolate data: constant values over the year are assumed.
+# Define interpolation function
+interpolate_quarterly <- function(df) {
+  df$year <- as.numeric(df$year)
+  start_date <- as.Date(paste0(df$year[1], "-01-01"))
+  end_date <- as.Date(paste0(df$year[length(df$year)], "-12-31"))
+  all_quarters <- seq(start_date, end_date, by = "quarter")
+  value_col <- colnames(df)[2]
+  df_quarterly <- data.frame(year = all_quarters)
+  df_quarterly[,2] <- NA
+  for (i in 1:nrow(df_quarterly)) {
+    year_val <- df[df$year == year(df_quarterly$year[i]), value_col]
+    if (length(year_val) == 1) {
+      df_quarterly[i,2] <- year_val
+    } else if (length(year_val) == 0) {
+      df_quarterly[i,2] <- NA
+    } else {
+      start_val <- year_val[1]
+      end_val <- year_val[2]
+      quarters_diff <- as.numeric(df_quarterly$year[i] - as.Date(paste0(year(df_quarterly$year[i]), "-01-01")))
+      quarters_total <- as.numeric(as.Date(paste0(year_val[2], "-01-01")) - as.Date(paste0(year_val[1], "-01-01")))
+      df_quarterly[i,2] <- start_val + ((end_val - start_val) / quarters_total) * quarters_diff
+    }
+  }
+  colnames(df_quarterly)[2] <- value_col
+  return(df_quarterly)
+}
+
+
+# Interpolate data
+# interest_rate <- interpolate_quarterly(interest_rate)
+# inflation_rate <- interpolate_quarterly(inflation_rate)
+# inflation_target <- interpolate_quarterly(inflation_target)
+# output_gap <- interpolate_quarterly(output_gap)
+# gdp <- interpolate_quarterly(gdp)
+# inflation_gap <- interpolate_quarterly(inflation_gap)
+
 # Create dataframe containing relevant data
 df <- merge(interest_rate, output_gap, by = "year")
 df <- merge(df, gdp, by = "year")
 df <- merge(df, inflation_gap, by = "year")
+df
 
 # Plot interest rates
 ggplot(interest_rate, aes(x = year, y = interest_rate)) +
