@@ -60,6 +60,8 @@ inflation_rate <- read.csv(
   file.path(data_dir, "inflation_rate.csv"),
   sep = "\t"
 )
+inflation_rate = inflation_rate*100
+inflation_rate
 
 inflation_target <- read.csv(
   file.path(data_dir, "inflation_target.csv"),
@@ -75,7 +77,6 @@ gdp <- read.csv(
   file.path(data_dir, "gdp.csv"),
   sep = "\t"
 )
-gdp
 
 inflation_gap <- data.frame(
   year = seq(1980, 2002),
@@ -117,14 +118,13 @@ interpolate_quarterly <- function(df) {
 # inflation_target <- interpolate_quarterly(inflation_target)
 # output_gap <- interpolate_quarterly(output_gap)
 # gdp <- interpolate_quarterly(gdp)
-# inflation_gap <- interpolate_quarterly(inflation_gap)
+# inflation_gap <- interpolate_quarterly(inflation_gap)
 
 # Create dataframe containing relevant data
 df <- merge(interest_rate, output_gap, by = "year")
 df <- merge(df, gdp, by = "year")
 df <- merge(df, inflation_gap, by = "year")
 df
-
 # Plot interest rates
 ggplot(interest_rate, aes(x = year, y = interest_rate)) +
   geom_point() +
