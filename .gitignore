@@ -1,6 +1,8 @@
 # Mac OS
 .DS_Store
 
+.ipynb_checkpoints
+
 # data
 #.dvc is there as there are private paths
 files
