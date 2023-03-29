@@ -83,35 +83,6 @@ inflation_gap <- data.frame(
   inflation_gap = inflation_rate[, 2] - inflation_target[, 2]
 )
 
-# Interpolate data: constant values over the year are assumed.
-# Define interpolation function (however, in this regression we're not going to use interpolation)
-interpolate_quarterly <- function(df) {
-  df$year <- as.numeric(df$year)
-  start_date <- as.Date(paste0(df$year[1], "-01-01"))
-  end_date <- as.Date(paste0(df$year[length(df$year)], "-12-31"))
-  all_quarters <- seq(start_date, end_date, by = "quarter")
-  value_col <- colnames(df)[2]
-  df_quarterly <- data.frame(year = all_quarters)
-  df_quarterly[,2] <- NA
-  for (i in 1:nrow(df_quarterly)) {
-    year_val <- df[df$year == year(df_quarterly$year[i]), value_col]
-    if (length(year_val) == 1) {
-      df_quarterly[i,2] <- year_val
-    } else if (length(year_val) == 0) {
-      df_quarterly[i,2] <- NA
-    } else {
-      start_val <- year_val[1]
-      end_val <- year_val[2]
-      quarters_diff <- as.numeric(df_quarterly$year[i] - as.Date(paste0(year(df_quarterly$year[i]), "-01-01")))
-      quarters_total <- as.numeric(as.Date(paste0(year_val[2], "-01-01")) - as.Date(paste0(year_val[1], "-01-01")))
-      df_quarterly[i,2] <- start_val + ((end_val - start_val) / quarters_total) * quarters_diff
-    }
-  }
-  colnames(df_quarterly)[2] <- value_col
-  return(df_quarterly)
-}
-
-
 # Create dataframe containing relevant data
 df <- merge(interest_rate, output_gap, by = "year")
 df <- merge(df, gdp, by = "year")
@@ -214,7 +185,8 @@ fit_plot <- add_trace(
 )
 fit_plot
 
-#Plot actual values vs fitted values
+
+#Plot actual values vs fitted values of interest rates
 rates = data.frame(interest_rate, fitted = fitted(taylor_reg))
 ggplot(rates, aes(x = year)) +
   geom_line(aes(y = interest_rate, color = "Actual"), size = 1) +
@@ -223,7 +195,6 @@ ggplot(rates, aes(x = year)) +
   xlab("Year") +
   ylab("Interest Rate") +
   ggtitle("Actual vs Fitted Interest Rates Taylor OLS")
-
 
 ################################### TESTS ######################################
 # We will mostly work on residuals to run tests on the OLS assumptions.
@@ -334,8 +305,8 @@ bgtest(taylor_reg, 5)
 # but we must pay attention to incur in the trap of overfitting.
 
 
-# Based also on the observations derived from Sarcinelli's paper, we will start by adding exchange rate
-# to the model, as up until the mid-90s it was considered a measure much more impactful on the interest rates
+# Based also on the Svensson’s observations quoted in Osterholm’s paper, we will start by adding exchange rate
+# to the model, as it should be a measure much more impactful on the interest rates
 # than the inflation rate
 
 # Load some additional data
@@ -483,6 +454,7 @@ taylor_subset <- lm(
 )
 summary(taylor_subset)
 
+
 # Preliminary visualization of residuals
 residuals <- residuals(taylor_subset)
 residuals <- data.frame(residuals)
@@ -501,6 +473,7 @@ ggplot(rates2, aes(x = year)) +
   xlab("Year") +
   ylab("Interest Rate") +
   ggtitle("Actual vs Fitted Interest Rates Extended OLS")
+
 
 ############################# PCA ############################
 
