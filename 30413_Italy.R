@@ -1,8 +1,8 @@
 ##### 30413 ECONOMETRICS ASSIGNMENT Y22/23 ####
 
+# Tancredi Dorsi - 3161375
 # Alessandro Morosini - 3149076
 # Francesco Vacca - 3140929
-# Tancredi Dorsi - 3161375
 
 
 ################################### SET-UP #####################################
@@ -50,7 +50,7 @@ data_dir <- file.path(current_dir, "data", "clean")
 
 
 #################################### DATA ######################################
-# Load the data and create a do some preliminary visualization
+# Load the data and create some preliminary visualization
 
 # Load data for Taylor Regression
 interest_rate <- read.csv(
@@ -82,43 +82,6 @@ inflation_gap <- data.frame(
   year = seq(1980, 2002),
   inflation_gap = inflation_rate[, 2] - inflation_target[, 2]
 )
-
-# Interpolate data: constant values over the year are assumed.
-# Define interpolation function
-interpolate_quarterly <- function(df) {
-  df$year <- as.numeric(df$year)
-  start_date <- as.Date(paste0(df$year[1], "-01-01"))
-  end_date <- as.Date(paste0(df$year[length(df$year)], "-12-31"))
-  all_quarters <- seq(start_date, end_date, by = "quarter")
-  value_col <- colnames(df)[2]
-  df_quarterly <- data.frame(year = all_quarters)
-  df_quarterly[,2] <- NA
-  for (i in 1:nrow(df_quarterly)) {
-    year_val <- df[df$year == year(df_quarterly$year[i]), value_col]
-    if (length(year_val) == 1) {
-      df_quarterly[i,2] <- year_val
-    } else if (length(year_val) == 0) {
-      df_quarterly[i,2] <- NA
-    } else {
-      start_val <- year_val[1]
-      end_val <- year_val[2]
-      quarters_diff <- as.numeric(df_quarterly$year[i] - as.Date(paste0(year(df_quarterly$year[i]), "-01-01")))
-      quarters_total <- as.numeric(as.Date(paste0(year_val[2], "-01-01")) - as.Date(paste0(year_val[1], "-01-01")))
-      df_quarterly[i,2] <- start_val + ((end_val - start_val) / quarters_total) * quarters_diff
-    }
-  }
-  colnames(df_quarterly)[2] <- value_col
-  return(df_quarterly)
-}
-
-
-# Interpolate data
-# interest_rate <- interpolate_quarterly(interest_rate)
-# inflation_rate <- interpolate_quarterly(inflation_rate)
-# inflation_target <- interpolate_quarterly(inflation_target)
-# output_gap <- interpolate_quarterly(output_gap)
-# gdp <- interpolate_quarterly(gdp)
-# inflation_gap <- interpolate_quarterly(inflation_gap)
 
 # Create dataframe containing relevant data
 df <- merge(interest_rate, output_gap, by = "year")
@@ -153,8 +116,7 @@ ggplot(output_gap, aes(x = year, y = output_gap)) +
     title = "Italian Output Gap 1980-2002",
     x = "Year",
     y = "Output Gap"
-  ) +
-  stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
+  )
 
 # Plot inflation gap, i.e. difference between actual inflation and target
 ggplot(inflation_gap, aes(x = year, y = inflation_gap)) +
@@ -163,8 +125,7 @@ ggplot(inflation_gap, aes(x = year, y = inflation_gap)) +
     title = "Italian Inflation Gap 1980-2002",
     x = "Year",
     y = "Inflation Gap"
-  ) +
-  stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
+  ) 
 
 # Plot inflation rate
 ggplot(inflation_rate, aes(x = year, y = inflation_rate)) +
@@ -224,15 +185,16 @@ fit_plot <- add_trace(
 )
 fit_plot
 
-# Draw fitted values vs real values
-ggplot(df) +
-  aes(x = year) +
-  geom_point(aes(y = interest_rate, color = "Interest Rate"), size = 3) +
-  geom_point(aes(y = fitted(taylor_reg), color = "Fitted Value"), size = 3) +
-  scale_color_manual(name = "Legend", values = c("Interest Rate" = "blue", "Fitted Value" = "red")) +
-  labs(x = "Year", y = "Interest Rate") +
-  theme_minimal()
 
+#Plot actual values vs fitted values of interest rates
+rates = data.frame(interest_rate, fitted = fitted(taylor_reg))
+ggplot(rates, aes(x = year)) +
+  geom_line(aes(y = interest_rate, color = "Actual"), size = 1) +
+  geom_line(aes(y = fitted, color = "Fitted"), size = 1) +
+  scale_color_manual(values = c("Actual" = "blue","Fitted"="red")) +
+  xlab("Year") +
+  ylab("Interest Rate") +
+  ggtitle("Actual vs Fitted Interest Rates Taylor OLS")
 
 ################################### TESTS ######################################
 # We will mostly work on residuals to run tests on the OLS assumptions.
@@ -343,8 +305,8 @@ bgtest(taylor_reg, 5)
 # but we must pay attention to incur in the trap of overfitting.
 
 
-# Based also on the observations derived from Sarcinelli's paper, we will start by adding exchange rate
-# to the model, as up until the mid-90s it was considered a measure much more impactful on the interest rates
+# Based also on the Svensson’s observations quoted in Osterholm’s paper, we will start by adding exchange rate
+# to the model, as it should be a measure much more impactful on the interest rates
 # than the inflation rate
 
 # Load some additional data
@@ -490,11 +452,8 @@ taylor_subset <- lm(
   interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
   data = df
 )
-
-df
-
-df[, 2:5]
 summary(taylor_subset)
+
 
 # Preliminary visualization of residuals
 residuals <- residuals(taylor_subset)
@@ -503,6 +462,44 @@ residuals$ind <- rep(1980:2002)
 par(mfrow = c(2, 2))
 plot(taylor_subset)
 par(mfrow = c(1, 1))
+
+
+# Plot Actual vs Fitted interest rates
+rates2 = data.frame(interest_rate, fitted = fitted(taylor_subset))
+ggplot(rates2, aes(x = year)) +
+  geom_line(aes(y = interest_rate, color = "Actual"),size = 1) +
+  geom_line(aes(y = fitted, color = "Fitted"),size = 1) +
+  scale_color_manual(values = c("Actual" = "blue","Fitted"="red")) +
+  xlab("Year") +
+  ylab("Interest Rate") +
+  ggtitle("Actual vs Fitted Interest Rates Extended OLS")
+
+
+############################# PCA ############################
+
+# Fit the regression model
+taylor_subset <- lm(
+  interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
+  data = df
+)
+
+# Extract the independent variables
+X <- select(df, us_bond_yield, exchange_rate, output_gap, unemployment_rate)
+
+# Perform PCA on the independent variables
+pca <- prcomp(X)
+
+# Extract the first three principal components
+PC1 <- pca$x[,1]
+PC2 <- pca$x[,2]
+PC3 <- pca$x[,3]
+
+# Create a data frame with the principal components and predicted values from the regression model
+data <- data.frame(PC1, PC2, PC3, predicted = predict(taylor_subset))
+
+# Create 3D scatterplot with predicted values as color
+plot_ly(data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~predicted, colors = c("blue", "red")) %>%
+  add_markers()
 
 
 # TEST FOR LINEARITY
@@ -572,95 +569,4 @@ bgtest(taylor_reg, 3)
 bgtest(taylor_reg, 4)
 bgtest(taylor_reg, 5)
 
-############################# PCA ############################
 
-library(plotly)
-library(dplyr)
-
-# Fit the regression model
-taylor_subset <- lm(
-  interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
-  data = df
-)
-
-# Extract the independent variables
-X <- select(df, us_bond_yield, exchange_rate, output_gap, unemployment_rate)
-
-# Perform PCA on the independent variables
-pca <- prcomp(X)
-pca
-
-# Extract the first three principal components
-PC1 <- pca$x[,1]
-PC2 <- pca$x[,2]
-
-
-PC1_df <- data.frame(year=seq(1980, 2002), PC1)
-PC2_df <- data.frame(year=seq(1980, 2002), PC2)
-
-data <- merge(interest_rate, PC1_df)
-data <- merge(data, PC2_df)
-data
-
-pca_reg = lm(interest_rate ~ PC1 + PC2, data=data)
-summary(pca_reg)
-
-# Create 3D scatterplot with predicted values as color
-plot_ly(data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~predicted, colors = c("blue", "red")) %>%
-  add_markers()
-layout(scene = list(camera = list(eye = list(x = 1.8, y = 1.8, z = 1.8))))
-
-
-axis_x <- seq(min(PC1), max(PC1), by = 1)
-axis_y <- seq(min(PC2), max(PC2), by = 1)
-
-pca_surface
-pca_surface <- expand.grid(PC1 = axis_x, PC2 = axis_y, KEEP.OUT.ATTRS = F)
-pca_surface$interest_rate <- predict.lm(pca_reg, newdata = pca_surface)
-pca_surface <- acast(pca_surface, PC1 ~ PC2, value.var = "interest_rate")
-
-fit_plot <- plot_ly(
-  data, 
-  x = ~PC1, 
-  y = ~PC2, 
-  z = ~interest_rate, 
-  type = "scatter3d",
-  mode = "markers",
-  marker = list(color = c("black", "black", "black"))
-)
-
-fit_plot <- add_trace(
-  p = fit_plot,
-  z = pca_surface,
-  x = axis_x,
-  y = axis_y,
-  type = "surface"
-)
-fit_plot
-
-
-######### male che vada 
-
-# Fit the regression model
-taylor_subset <- lm(
-  interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
-  data = df
-)
-
-# Extract the independent variables
-X <- select(df, us_bond_yield, exchange_rate, output_gap, unemployment_rate)
-
-# Perform PCA on the independent variables
-pca <- prcomp(X)
-
-# Extract the first three principal components
-PC1 <- pca$x[,1]
-PC2 <- pca$x[,2]
-PC3 <- pca$x[,3]
-
-# Create a data frame with the principal components and predicted values from the regression model
-data <- data.frame(PC1, PC2, PC3, predicted = predict(taylor_subset))
-
-# Create 3D scatterplot with predicted values as color
-plot_ly(data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~predicted, colors = c("blue", "red")) %>%
-  add_markers()
