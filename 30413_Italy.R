@@ -40,6 +40,8 @@ if (!require("MASS")) install.packages("MASS")
 library(MASS)
 if (!require("lubridate")) install.packages("lubridate")
 library(lubridate)
+if (!require("dplyr")) install.packages("dplyr")
+library(dplyr)
 
 # Set directories
 current_path <- rstudioapi::getActiveDocumentContext()$path
@@ -230,10 +232,6 @@ ggplot(df) +
   scale_color_manual(name = "Legend", values = c("Interest Rate" = "blue", "Fitted Value" = "red")) +
   labs(x = "Year", y = "Interest Rate") +
   theme_minimal()
-
-
-# Do some comments of the model here
-# interepreation of coefficients, fitted values ..
 
 
 ################################### TESTS ######################################
@@ -493,6 +491,11 @@ taylor_subset <- lm(
   data = df
 )
 
+df
+
+df[, 2:5]
+summary(taylor_subset)
+
 # Preliminary visualization of residuals
 residuals <- residuals(taylor_subset)
 residuals <- data.frame(residuals)
@@ -569,3 +572,95 @@ bgtest(taylor_reg, 3)
 bgtest(taylor_reg, 4)
 bgtest(taylor_reg, 5)
 
+############################# PCA ############################
+
+library(plotly)
+library(dplyr)
+
+# Fit the regression model
+taylor_subset <- lm(
+  interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
+  data = df
+)
+
+# Extract the independent variables
+X <- select(df, us_bond_yield, exchange_rate, output_gap, unemployment_rate)
+
+# Perform PCA on the independent variables
+pca <- prcomp(X)
+pca
+
+# Extract the first three principal components
+PC1 <- pca$x[,1]
+PC2 <- pca$x[,2]
+
+
+PC1_df <- data.frame(year=seq(1980, 2002), PC1)
+PC2_df <- data.frame(year=seq(1980, 2002), PC2)
+
+data <- merge(interest_rate, PC1_df)
+data <- merge(data, PC2_df)
+data
+
+pca_reg = lm(interest_rate ~ PC1 + PC2, data=data)
+summary(pca_reg)
+
+# Create 3D scatterplot with predicted values as color
+plot_ly(data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~predicted, colors = c("blue", "red")) %>%
+  add_markers()
+layout(scene = list(camera = list(eye = list(x = 1.8, y = 1.8, z = 1.8))))
+
+
+axis_x <- seq(min(PC1), max(PC1), by = 1)
+axis_y <- seq(min(PC2), max(PC2), by = 1)
+
+pca_surface
+pca_surface <- expand.grid(PC1 = axis_x, PC2 = axis_y, KEEP.OUT.ATTRS = F)
+pca_surface$interest_rate <- predict.lm(pca_reg, newdata = pca_surface)
+pca_surface <- acast(pca_surface, PC1 ~ PC2, value.var = "interest_rate")
+
+fit_plot <- plot_ly(
+  data, 
+  x = ~PC1, 
+  y = ~PC2, 
+  z = ~interest_rate, 
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(color = c("black", "black", "black"))
+)
+
+fit_plot <- add_trace(
+  p = fit_plot,
+  z = pca_surface,
+  x = axis_x,
+  y = axis_y,
+  type = "surface"
+)
+fit_plot
+
+
+######### male che vada 
+
+# Fit the regression model
+taylor_subset <- lm(
+  interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
+  data = df
+)
+
+# Extract the independent variables
+X <- select(df, us_bond_yield, exchange_rate, output_gap, unemployment_rate)
+
+# Perform PCA on the independent variables
+pca <- prcomp(X)
+
+# Extract the first three principal components
+PC1 <- pca$x[,1]
+PC2 <- pca$x[,2]
+PC3 <- pca$x[,3]
+
+# Create a data frame with the principal components and predicted values from the regression model
+data <- data.frame(PC1, PC2, PC3, predicted = predict(taylor_subset))
+
+# Create 3D scatterplot with predicted values as color
+plot_ly(data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~predicted, colors = c("blue", "red")) %>%
+  add_markers()
