@@ -1,8 +1,8 @@
 ##### 30413 ECONOMETRICS ASSIGNMENT Y22/23 ####
 
+# Tancredi Dorsi - 3161375
 # Alessandro Morosini - 3149076
 # Francesco Vacca - 3140929
-# Tancredi Dorsi - 3161375
 
 
 ################################### SET-UP #####################################
@@ -40,6 +40,8 @@ if (!require("MASS")) install.packages("MASS")
 library(MASS)
 if (!require("lubridate")) install.packages("lubridate")
 library(lubridate)
+if (!require("dplyr")) install.packages("dplyr")
+library(dplyr)
 
 # Set directories
 current_path <- rstudioapi::getActiveDocumentContext()$path
@@ -48,7 +50,7 @@ data_dir <- file.path(current_dir, "data", "clean")
 
 
 #################################### DATA ######################################
-# Load the data and create a do some preliminary visualization
+# Load the data and create some preliminary visualization
 
 # Load data for Taylor Regression
 interest_rate <- read.csv(
@@ -82,7 +84,7 @@ inflation_gap <- data.frame(
 )
 
 # Interpolate data: constant values over the year are assumed.
-# Define interpolation function
+# Define interpolation function (however, in this regression we're not going to use interpolation)
 interpolate_quarterly <- function(df) {
   df$year <- as.numeric(df$year)
   start_date <- as.Date(paste0(df$year[1], "-01-01"))
@@ -109,14 +111,6 @@ interpolate_quarterly <- function(df) {
   return(df_quarterly)
 }
 
-
-# Interpolate data
-# interest_rate <- interpolate_quarterly(interest_rate)
-# inflation_rate <- interpolate_quarterly(inflation_rate)
-# inflation_target <- interpolate_quarterly(inflation_target)
-# output_gap <- interpolate_quarterly(output_gap)
-# gdp <- interpolate_quarterly(gdp)
-# inflation_gap <- interpolate_quarterly(inflation_gap)
 
 # Create dataframe containing relevant data
 df <- merge(interest_rate, output_gap, by = "year")
@@ -151,8 +145,7 @@ ggplot(output_gap, aes(x = year, y = output_gap)) +
     title = "Italian Output Gap 1980-2002",
     x = "Year",
     y = "Output Gap"
-  ) +
-  stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
+  )
 
 # Plot inflation gap, i.e. difference between actual inflation and target
 ggplot(inflation_gap, aes(x = year, y = inflation_gap)) +
@@ -161,8 +154,7 @@ ggplot(inflation_gap, aes(x = year, y = inflation_gap)) +
     title = "Italian Inflation Gap 1980-2002",
     x = "Year",
     y = "Inflation Gap"
-  ) +
-  stat_smooth(method = "lm", formula = y ~ x, alpha = 0.2)
+  ) 
 
 # Plot inflation rate
 ggplot(inflation_rate, aes(x = year, y = inflation_rate)) +
@@ -222,18 +214,15 @@ fit_plot <- add_trace(
 )
 fit_plot
 
-# Draw fitted values vs real values
-ggplot(df) +
-  aes(x = year) +
-  geom_point(aes(y = interest_rate, color = "Interest Rate"), size = 3) +
-  geom_point(aes(y = fitted(taylor_reg), color = "Fitted Value"), size = 3) +
-  scale_color_manual(name = "Legend", values = c("Interest Rate" = "blue", "Fitted Value" = "red")) +
-  labs(x = "Year", y = "Interest Rate") +
-  theme_minimal()
-
-
-# Do some comments of the model here
-# interepreation of coefficients, fitted values ..
+#Plot actual values vs fitted values
+rates = data.frame(interest_rate, fitted = fitted(taylor_reg))
+ggplot(rates, aes(x = year)) +
+  geom_line(aes(y = interest_rate, color = "Actual"), size = 1) +
+  geom_line(aes(y = fitted, color = "Fitted"), size = 1) +
+  scale_color_manual(values = c("Actual" = "blue","Fitted"="red")) +
+  xlab("Year") +
+  ylab("Interest Rate") +
+  ggtitle("Actual vs Fitted Interest Rates Taylor OLS")
 
 
 ################################### TESTS ######################################
@@ -492,6 +481,7 @@ taylor_subset <- lm(
   interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
   data = df
 )
+summary(taylor_subset)
 
 # Preliminary visualization of residuals
 residuals <- residuals(taylor_subset)
@@ -500,6 +490,43 @@ residuals$ind <- rep(1980:2002)
 par(mfrow = c(2, 2))
 plot(taylor_subset)
 par(mfrow = c(1, 1))
+
+
+# Plot Actual vs Fitted interest rates
+rates2 = data.frame(interest_rate, fitted = fitted(taylor_subset))
+ggplot(rates2, aes(x = year)) +
+  geom_line(aes(y = interest_rate, color = "Actual"),size = 1) +
+  geom_line(aes(y = fitted, color = "Fitted"),size = 1) +
+  scale_color_manual(values = c("Actual" = "blue","Fitted"="red")) +
+  xlab("Year") +
+  ylab("Interest Rate") +
+  ggtitle("Actual vs Fitted Interest Rates Extended OLS")
+
+############################# PCA ############################
+
+# Fit the regression model
+taylor_subset <- lm(
+  interest_rate ~ us_bond_yield + exchange_rate + output_gap + unemployment_rate, 
+  data = df
+)
+
+# Extract the independent variables
+X <- select(df, us_bond_yield, exchange_rate, output_gap, unemployment_rate)
+
+# Perform PCA on the independent variables
+pca <- prcomp(X)
+
+# Extract the first three principal components
+PC1 <- pca$x[,1]
+PC2 <- pca$x[,2]
+PC3 <- pca$x[,3]
+
+# Create a data frame with the principal components and predicted values from the regression model
+data <- data.frame(PC1, PC2, PC3, predicted = predict(taylor_subset))
+
+# Create 3D scatterplot with predicted values as color
+plot_ly(data, x = ~PC1, y = ~PC2, z = ~PC3, color = ~predicted, colors = c("blue", "red")) %>%
+  add_markers()
 
 
 # TEST FOR LINEARITY
@@ -568,4 +595,5 @@ bgtest(taylor_reg, 2)
 bgtest(taylor_reg, 3)
 bgtest(taylor_reg, 4)
 bgtest(taylor_reg, 5)
+
 
